@@ -130,6 +130,12 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v1
+        with:
+          build_version: ${{ github.sha }}
+
+      - name: Get deployment URL
+        id: get-deployment-url
+        run: echo "PAGE_URL=${{ steps.deployment.outputs.page_url }}" >> $GITHUB_ENV
 
   verify:
     name: 🧪 Verify Successful Deployment
@@ -144,8 +150,7 @@ jobs:
 
       - name: Run Frontend Smoke Test
         run: |
-          export TEST_URL=${{steps.deployment.outputs.page_url}}
+          echo "TEST_URL=${{ env.PAGE_URL }}" >> $GITHUB_ENV
           cd frontend/e2e
           npm i
           npm run smoke
-
