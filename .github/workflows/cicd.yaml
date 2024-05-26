@@ -1,117 +1,162 @@
 name: CI/CD Pipeline
 
-on:
+on: 
   push:
     branches:
       - main
 
-jobs:
-  build:
-    name: Build Artifact
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs: 
+  audit:
+    name: 🪄 Audit Frontend Deps
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - name: Build Artifact
-        run: |
-          # Replace these commands with your actual build commands
-          echo "Building artifact..."
-          npm install
-          npm run build
-          mkdir -p holding_area
-          touch holding_area/artifact.zip
+      - name: Run the audit on production deps only
+        run: npm audit --omit=dev 
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v2
+  build: 
+    name: Build Frontend Artifact
+    runs-on: ubuntu-latest
+    needs: audit
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v3
         with:
-          name: artifact
-          path: holding_area
-
-  security-scan:
-    name: Check Dependencies for Security Issues
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
+          node-version: 16.x
+          cache: 'npm'
+      
       - name: Install Dependencies
-        run: npm install
-
-      - name: Check for Security Issues
-        run: npm audit
-
-  unit-test:
-    name: Run Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Run Unit Tests
-        run: npm test
+        run: |
+          cd frontend
+          npm i
+          
+      - name: Build artifact
+        run: |
+          cd frontend
+          npm run build
+      
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v1
+        with: 
+          path: frontend/build
 
   lint:
-    name: Ensure Coding Style is Correct
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Lint Code
-        run: npm run lint
-
-  static-analysis:
-    name: Run Static Analysis
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Run Static Analysis
-        run: npm run static-analysis
-
-  deploy:
-    name: Deploy Artifact to Public Server
+    name: 📎 Ensure Code Style
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
-      - name: Download Artifact
-        uses: actions/download-artifact@v2
+      - name: Setup Node 16
+        uses: actions/setup-node@v3
         with:
-          name: artifact
-          path: holding_area
+          node-version: 16.x
+          cache: 'npm'
+      
+      - name: Install deps
+        run: cd frontend && npm i
 
-      - name: Deploy to Public Server
-        # Add your deployment steps here
-        run: |
-          # Replace these commands with your actual deployment commands
-          echo "Deploying artifact..."
-          # Example: scp or rsync commands to copy files to the server
-
-  verify:
-    name: Verify Application is Working After Deployment
+      - name: 🔍 Lint code
+        run: cd frontend && npm run lint
+  
+  test:
+    name: 🪛 Run Unit Tests
+    needs: build
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node 16
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+          cache: 'npm'
+
+      - name: Install deps
+        run: cd frontend && npm i
+
+      - name: Run the unit tests
+        run: cd frontend && npm run test-ci
+
+  static-analysis:
+    name: 🔬 Run Static Code Analysis
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          config-file: .github/codeql/codeql.config.yml
+          
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+          cache: 'npm'
+
+      - name: Install Deps
+        run: cd frontend && npm i
+
+      - name: Build
+        run: cd frontend && npm run build
+
+  deploy:
+    name: 📦 Deploy Frontend Artifact
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+      - test
+      - static-analysis
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v1
+        with:
+          build_version: ${{ github.sha }}
+
+      - name: Get deployment URL
+        id: get-deployment-url
+        run: echo "PAGE_URL=${{ steps.deployment.outputs.page_url }}" >> $GITHUB_ENV
+
+  smoke-test:
+    name: 🌫️ Run Smoke Test
     needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      pages: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Verify Deployment
-        # Add verification steps here, such as running smoke tests or integration tests
-        run: |
-          # Replace these commands with your actual verification commands
-          echo "Verifying deployment..."
-          # Example: Run smoke tests against the deployed application
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+
+      - name: Set up environment
+        run: echo "TEST_URL=${{ env.PAGE_URL }}" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: cd frontend/e2e && npm install
+
+      - name: Run smoke test
+        run: cd frontend/e2e && npm run smoke
