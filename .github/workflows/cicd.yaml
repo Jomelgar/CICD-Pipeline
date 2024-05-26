@@ -1,9 +1,7 @@
 name: CI/CD Pipeline
 
 on: 
-  push:
-    branches:
-      - main
+  push: 
 
 permissions:
   contents: read
@@ -11,15 +9,6 @@ permissions:
   id-token: write
 
 jobs: 
-  audit:
-    name: 🪄 Audit Frontend Deps
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run the audit on production deps only
-        run: npm audit --omit=dev 
-
   build: 
     name: Build Frontend Artifact
     runs-on: ubuntu-latest
@@ -36,17 +25,29 @@ jobs:
         run: |
           cd frontend
           npm i
-          
       - name: Build artifact
         run: |
           cd frontend
           npm run build
       
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+      - uses: actions/upload-pages-artifact@v1
         with: 
           path: frontend/build
 
+      # - id: build-publish
+      #   uses: bitovi/github-actions-react-to-github-pages@v1.2.2
+      #   with:
+      #     path: build # change to your build folder
+      
+  audit:
+    name: 🪄 Audit Frontend Deps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the audit on production deps only
+        run: npm audit --omit=dev 
+  
   lint:
     name: 📎 Ensure Code Style
     runs-on: ubuntu-latest
@@ -97,7 +98,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v2
         with:
-          config-file: .github/codeql/codeql.config.yml
+          config-file: .github/codeql /codeql.config.yml
           
       - name: Setup Node
         uses: actions/setup-node@v3
@@ -118,7 +119,9 @@ jobs:
       - lint
       - test
       - static-analysis
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/olt'
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     permissions:
       pages: write
       id-token: write
@@ -129,6 +132,7 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v1
+
   verify:
     name: 🧪 Verify Successful Deployment
     needs:
