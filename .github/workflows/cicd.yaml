@@ -1,8 +1,9 @@
-
 name: CI/CD Pipeline
 
 on: 
-  push: 
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -10,6 +11,15 @@ permissions:
   id-token: write
 
 jobs: 
+  audit:
+    name: 🪄 Audit Frontend Deps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the audit on production deps only
+        run: npm audit --omit=dev 
+
   build: 
     name: Build Frontend Artifact
     runs-on: ubuntu-latest
@@ -26,6 +36,7 @@ jobs:
         run: |
           cd frontend
           npm i
+          
       - name: Build artifact
         run: |
           cd frontend
@@ -35,20 +46,6 @@ jobs:
         with: 
           path: frontend/build
 
-      # - id: build-publish
-      #   uses: bitovi/github-actions-react-to-github-pages@v1.2.2
-      #   with:
-      #     path: build # change to your build folder
-      
-  audit:
-    name: 🪄 Audit Frontend Deps
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run the audit on production deps only
-        run: npm audit --omit=dev 
-  
   lint:
     name: 📎 Ensure Code Style
     runs-on: ubuntu-latest
@@ -120,7 +117,7 @@ jobs:
       - lint
       - test
       - static-analysis
-    if: github.ref == 'refs/heads/olt'
+    if: github.ref == 'refs/heads/main'
     outputs:
       page_url: ${{ steps.deployment.outputs.page_url }}
     permissions:
@@ -130,6 +127,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v3
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v1
