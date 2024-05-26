@@ -137,20 +137,26 @@ jobs:
         id: get-deployment-url
         run: echo "PAGE_URL=${{ steps.deployment.outputs.page_url }}" >> $GITHUB_ENV
 
-  verify:
-    name: 🧪 Verify Successful Deployment
-    needs:
-      - deploy
+  smoke-test:
+    name: 🌫️ Run Smoke Test
+    needs: deploy
     runs-on: ubuntu-latest
-    if: success()
-    permissions: write-all
+    permissions:
+      pages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Run Frontend Smoke Test
-        run: |
-          echo "TEST_URL=${{ env.PAGE_URL }}" >> $GITHUB_ENV
-          cd frontend/e2e
-          npm i
-          npm run smoke
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+
+      - name: Set up environment
+        run: echo "TEST_URL=${{ env.PAGE_URL }}" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: cd frontend/e2e && npm install
+
+      - name: Run smoke test
+        run: cd frontend/e2e && npm run smoke
