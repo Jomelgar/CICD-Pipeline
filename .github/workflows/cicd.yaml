@@ -124,18 +124,11 @@ jobs:
       id-token: write
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v3
-
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v1
-        with:
-          build_version: ${{ github.sha }}
-
-      - name: Get deployment URL
-        id: get-deployment-url
-        run: echo "PAGE_URL=${{ steps.deployment.outputs.page_url }}" >> $GITHUB_ENV
   verify:
     name: 🧪 Verify Successful Deployment
     needs:
