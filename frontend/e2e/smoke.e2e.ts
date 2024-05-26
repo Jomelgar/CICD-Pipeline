@@ -6,6 +6,10 @@ async function main() {
     if (!url) throw Error("No TEST_URL defined.");
     const browser = await puppeteer.launch();
     const page = await browser.newPage();
+    page.on('error', (err) => {
+      console.error('Page error:', err);
+      process.exit(1);
+    });
     await page.goto(url);
     const selector = "#page-title";
     await page.waitForSelector(selector);
@@ -20,10 +24,10 @@ async function main() {
       throw new Error("Smoke test failed.");
     }
     console.log("Smoke test passed.");
-    (<any>process).exitCode = 0;
+    process.exit(0);
   } catch (err) {
-    (<any>process).exitCode = 1;
-    throw err;
+    console.error('An error occurred:', err);
+    process.exit(1);
   }
 }
 
