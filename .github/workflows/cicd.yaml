@@ -1,124 +1,110 @@
-name: CI/CD Pipeline
+name: Pipeline for Continuous Integration and Deployment
 
-on: 
-  push: 
+# This workflow gets triggered on push or pull request events to the main branch
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
+# Permissions
 permissions:
   contents: read
   pages: write
   id-token: write
 
 jobs: 
-  build: 
-    name: Build Frontend Artifact
+  audit-job:
+    name: Audit Dependencies
     runs-on: ubuntu-latest
-    needs: audit
     steps:
       - uses: actions/checkout@v4
+      - name: Audit production dependencies
+        run: npm audit --omit=dev 
 
+  build-job: 
+    name: Build Artifact
+    runs-on: ubuntu-latest
+    needs: audit-job
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
           node-version: 16.x
           cache: 'npm'
-      
-      - name: Install Dependencies
+      - name: Install and build
         run: |
           cd frontend
-          npm i
-      - name: Build artifact
-        run: |
-          cd frontend
+          npm install
           npm run build
-      
       - uses: actions/upload-pages-artifact@v1
         with: 
           path: frontend/build
 
-      # - id: build-publish
-      #   uses: bitovi/github-actions-react-to-github-pages@v1.2.2
-      #   with:
-      #     path: build # change to your build folder
-      
-  audit:
-    name: 🪄 Audit Frontend Deps
+  lint-job:
+    name: Lint Code
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run the audit on production deps only
-        run: npm audit --omit=dev 
-  
-  lint:
-    name: 📎 Ensure Code Style
-    runs-on: ubuntu-latest
-    needs: build
+    needs: build-job
     steps:
       - uses: actions/checkout@v3
-
-      - name: Setup Node 16
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 16.x
           cache: 'npm'
-      
-      - name: Install deps
-        run: cd frontend && npm i
+      - name: Install dependencies and lint
+        run: |
+          cd frontend
+          npm install
+          npm run lint
 
-      - name: 🔍 Lint code
-        run: cd frontend && npm run lint
-  
-  test:
-    name: 🪛 Run Unit Tests
-    needs: build
+  test-job:
+    name: Run Tests
+    needs: build-job
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
-      - name: Setup Node 16
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 16.x
           cache: 'npm'
+      - name: Install dependencies and run tests
+        run: |
+          cd frontend
+          npm install
+          npm run test-ci
 
-      - name: Install deps
-        run: cd frontend && npm i
-
-      - name: Run the unit tests
-        run: cd frontend && npm run test-ci
-
-  static-analysis:
-    name: 🔬 Run Static Code Analysis
-    needs: build
+  static-analysis-job:
+    name: Static Code Analysis
+    needs: build-job
     runs-on: ubuntu-latest
     permissions:
       security-events: write
     steps:
       - uses: actions/checkout@v3
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v2
         with:
-          config-file: .github/codeql/codeql.config.yml
-          
-      - name: Setup Node
+          config-file: .github/codeql /codeql.config.yml
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 16.x
           cache: 'npm'
+      - name: Install dependencies and build
+        run: |
+          cd frontend
+          npm install
+          npm run build
 
-      - name: Install Deps
-        run: cd frontend && npm i
-
-      - name: Build
-        run: cd frontend && npm run build
-
-  deploy:
-    name: 📦 Deploy Frontend Artifact
+  deploy-job:
+    name: Deploy Artifact
     runs-on: ubuntu-latest
     needs:
-      - lint
-      - test
-      - static-analysis
+      - lint-job
+      - test-job
+      - static-analysis-job
     if: github.ref == 'refs/heads/main'
     outputs:
       page_url: ${{ steps.deployment.outputs.page_url }}
@@ -133,20 +119,19 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v1
 
-  verify:
-    name: 🧪 Verify Successful Deployment
+  verify-job:
+    name: Verify Deployment
     needs:
-      - deploy
+      - deploy-job
     runs-on: ubuntu-latest
     if: success()
     permissions: write-all
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-
-      - name: Run Frontend Smoke Test
+      - name: Run smoke test
         run: |
-          export TEST_URL=${{needs.deploy.outputs.page_url}}
+          export TEST_URL=${{needs.deploy-job.outputs.page_url}}
           cd frontend/e2e
-          npm i
+          npm install
           npm run smoke
